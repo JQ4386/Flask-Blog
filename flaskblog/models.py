@@ -1,8 +1,14 @@
 from datetime import datetime
-from flaskblog import db
+from flaskblog import db, login_manager
+from flask_login import UserMixin
+
+# login manager
+@login_manager.user_loader # decorator - tells flask-login how to get user
+def load_user(user_id):
+    return User.query.get(int(user_id))
 
 # models
-class User(db.Model):
+class User(db.Model, UserMixin):
     # columns
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(20), unique=True, nullable=False) # 20 char max, unique, not null
