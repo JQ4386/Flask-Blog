@@ -2,10 +2,12 @@ import secrets
 import os
 from PIL import Image
 from flask import render_template, flash, redirect, url_for, request, abort
-from flaskblog import app, db, bcrypt
-from flaskblog.forms import RegistrationForm, LoginForm, UpdateAccountForm, PostForm
+from flaskblog import app, db, bcrypt, mail # imports from __init__.py
+from flaskblog.forms import (RegistrationForm, LoginForm, UpdateAccountForm, PostForm, 
+RequestResetForm, ResetPasswordForm) 
 from flaskblog.models import User, Post
 from flask_login import login_user, current_user, logout_user, login_required
+from flask_mail import Message 
 
 # routes - url paths for our app to navigate to different pages
 
@@ -41,7 +43,7 @@ def register():
         # add user to db
         db.session.add(user)
         db.session.commit()
-        flash(f'Your account has been create! You are now able to log in!', 'success')
+        flash(f'Your account has been create! You are now able to log in!', 'success') #green alert
         return redirect(url_for('login'))
     return render_template('register.html', title='Register', form=form)
 
@@ -65,7 +67,7 @@ def login():
             return redirect(next_page) if next_page else redirect(url_for('home'))
         else:
             # flash unsuccessful login message
-            flash(f'Login unsuccessful. Please check email and password.', 'danger')
+            flash(f'Login unsuccessful. Please check email and password.', 'danger') #red alert
     return render_template('login.html', title='Login', form=form)
 
 # logout route
@@ -183,7 +185,7 @@ def delete_post(post_id):
     db.session.commit()
 
     # flash message
-    flash('Your post has been deleted!', 'success')
+    flash('Your post has been deleted!', 'success') 
     return redirect(url_for('home'))
 
 # user posts route
@@ -198,3 +200,63 @@ def user_posts(username):
         .order_by(Post.date_posted.desc())\
         .paginate(page=page, per_page=1)
     return render_template('user_posts.html', posts=posts, user=user)
+
+# function for sending reset email
+def send_reset_email(user):
+    # generate token
+    token = user.get_reset_token()
+    # create message (sender, recipients)
+    msg = Message('Password Reset Request', sender='noreply@demo.com', recipients=[user.email])
+    # create body of message with f-string
+    msg.body = f'''To reset your password, visit the following link:
+{url_for('reset_token', token=token, _external=True)} # _external=True gives absolute url
+If you did not make this request, please ignore this email. No changes will be made.
+    ''' 
+# make sure to not tab in string or else it will show up in email body
+# -> Can use Jinja2 template to create email body for more complex emails
+    # send message 
+    # mail.send(msg) # uncomment when ready to send email
+
+# reset request route
+@app.route('/reset_password', methods=['GET', 'POST'])
+def reset_request():
+    # check if user is logged in. If so, redirect to home page
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    form = RequestResetForm()
+    # if form is valid
+    if form.validate_on_submit():
+        # get user by email
+        user = User.query.filter_by(email=form.email.data).first()
+        # send reset email
+        send_reset_email(user)
+        # flash message
+        flash('If an account with that email exists, you will receive an email with instructions to reset your password.', 'info') # blue alert
+        return redirect(url_for('login'))
+    return render_template('reset_request.html', title='Reset Password', form=form)
+
+# reset password route (similar to register route, but with token)
+@app.route('/reset_password/<token>', methods=['GET', 'POST'])
+def reset_token(token):
+    if current_user.is_authenticated:
+        return redirect(url_for('home'))
+    # verify token
+    user = User.verify_reset_token(token)
+    # if token is invalid or expired
+    if user is None:
+        flash('That is an invalid or expired token', 'warning')
+        return redirect(url_for('reset_request'))
+    # if token is valid
+    form = ResetPasswordForm()
+
+    # similar to register route
+    if form.validate_on_submit():
+        # hash password
+        hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
+        # update user's password
+        user.password = hashed_password
+        # commit changes to db
+        db.session.commit()
+        flash('Your password has been updated! You are now able to log in', 'success')
+        return redirect(url_for('login'))
+    return render_template('reset_token.html', title='Reset Password', form=form)

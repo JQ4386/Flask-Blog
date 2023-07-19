@@ -69,3 +69,22 @@ class PostForm(FlaskForm):
     content = TextAreaField('Content',
                           validators=[DataRequired()])
     submit = SubmitField('Post')
+
+class RequestResetForm(FlaskForm):
+    email = StringField('Email',
+                        validators=[DataRequired(), Email()])
+    submit = SubmitField('Request Password Reset')
+    
+    # check if email exists in db
+    def validate_email(self, email):
+        user = User.query.filter_by(email=email.data).first()
+        if user is None: # if user does not exist
+            raise ValidationError('If an account with that email exists, you will receive an email with instructions to reset your password.')
+            # *Telling the user that the email does not exist in the db is a security risk, as it enables a hacker to find out which emails are registered in the db.*
+
+class ResetPasswordForm(FlaskForm):
+    password = PasswordField('Password',
+                             validators=[DataRequired()])
+    confirm_password = PasswordField('Confirm Password',
+                                     validators=[DataRequired(), EqualTo('password')])
+    submit = SubmitField('Reset Password')
