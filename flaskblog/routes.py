@@ -1,26 +1,11 @@
-import secrets, os
+import secrets
+import os
 from PIL import Image
-from flask import render_template, flash, redirect, url_for, request
+from flask import render_template, flash, redirect, url_for, request, abort
 from flaskblog import app, db, bcrypt
 from flaskblog.forms import RegistrationForm, LoginForm, UpdateAccountForm, PostForm
 from flaskblog.models import User, Post
 from flask_login import login_user, current_user, logout_user, login_required
-
-# dummy data
-posts = [
-    {
-        'author': 'John Doe',
-        'title': 'Blog Post 1',
-        'content': 'First post content',
-        'date_posted': 'April 20, 2018',
-    },
-    {
-        'author': 'Jane Doe',
-        'title': 'Blog Post 2',
-        'content': 'Second post content',
-        'date_posted': 'April 21, 2018',
-    }
-]
 
 # routes - url paths for our app to navigate to different pages
 
@@ -28,11 +13,10 @@ posts = [
 @app.route('/')
 @app.route('/home')
 def home():
+    posts = Post.query.all()
     return render_template('home.html', title='Home', posts=posts)
 
 # about page
-
-
 @app.route('/about')
 def about():
     return render_template('about.html', title='About')
@@ -96,7 +80,8 @@ def save_picture(form_picture):
     # create filename
     picture_fn = random_hex + f_ext
     # create path to save file to
-    picture_path = os.path.join(app.root_path, 'static/profile_pics', picture_fn)
+    picture_path = os.path.join(
+        app.root_path, 'static/profile_pics', picture_fn)
     # resize image before saving
     output_size = (125, 125)
     i = Image.open(form_picture)
@@ -105,6 +90,7 @@ def save_picture(form_picture):
     i.save(picture_path)
     # return filename
     return picture_fn
+
 
 @app.route('/account', methods=['GET', 'POST'])
 @login_required
@@ -123,20 +109,76 @@ def account():
         # commit changes to db
         db.session.commit()
         flash('Your account has been updated!', 'success')
-        return redirect(url_for('account')) # Avoid Post/Redirect/Get pattern
+        return redirect(url_for('account'))  # Avoid Post/Redirect/Get pattern
     elif request.method == 'GET':
         # populate form with current user info
         form.username.data = current_user.username
         form.email.data = current_user.email
-    image_file = url_for('static', filename='profile_pics/' + current_user.image_file)
+    image_file = url_for(
+        'static', filename='profile_pics/' + current_user.image_file)
     return render_template('account.html', title='Account', image_file=image_file, form=form)
 
+# new post route
 @app.route('/post/new', methods=['GET', 'POST'])
 @login_required
 def new_post():
     form = PostForm()
     # if form is valid
     if form.validate_on_submit():
+        # create post
+        post = Post(title=form.title.data,
+                    content=form.content.data, author=current_user)
+        # add post to db
+        db.session.add(post)
+        db.session.commit()
         flash('Your post has been created!', 'success')
         return redirect(url_for('home'))
-    return render_template('create_post.html', title='New Post', form=form)
+    return render_template('create_post.html', title='New Post', form=form, legend='New Post')
+
+# posts route
+@app.route('/post/<int:post_id>')
+def post(post_id):
+    # get post by id
+    post = Post.query.get_or_404(post_id)
+    return render_template('post.html', title=post.title, post=post)
+
+# update post route
+@app.route('/post/<int:post_id>/update', methods=['GET', 'POST'])
+@login_required
+def update_post(post_id):
+    post = Post.query.get_or_404(post_id)  # get post by id
+    # check if user is author of post
+    if post.author != current_user:
+        abort(403)
+    form = PostForm()
+    # if form is valid
+    if form.validate_on_submit():
+        # update post
+        post.title = form.title.data
+        post.content = form.content.data
+        # commit changes to db
+        db.session.commit()
+        flash('Your post has been updated!', 'success')
+        return redirect(url_for('post', post_id=post.id))
+    # populate form with current post info
+    elif request.method == 'GET':
+        form.title.data = post.title  # populate form with current post title
+        form.content.data = post.content  # populate form with current post content
+    return render_template('create_post.html', title='Update Post', 
+                            form=form, legend='Update Post')
+
+# delete post route
+@app.route('/post/<int:post_id>/delete', methods=['POST'])
+@login_required
+def delete_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    # check if user is author of post
+    if post.author != current_user:
+        abort(403)
+    # delete post
+    db.session.delete(post)
+    db.session.commit()
+
+    # flash message
+    flash('Your post has been deleted!', 'success')
+    return redirect(url_for('home'))
