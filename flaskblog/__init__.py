@@ -11,7 +11,7 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///site.db'
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
 login_manager = LoginManager(app) 
-login_manager.login_view = 'login' # set login route
+login_manager.login_view = 'users.login' # set login route
 login_manager.login_message_category = 'danger' # bootstrap class for flash message
 
 # set email server settings (cannot get authentication to work)
@@ -23,4 +23,11 @@ app.config['MAIL_PASSWORD'] = os.environ.get('EMAIL_PASS') #environment variable
 mail = Mail(app) 
 
 # import below to avoid circular imports
-from flaskblog import routes
+from flaskblog.users.routes import users
+from flaskblog.posts.routes import posts
+from flaskblog.main.routes import main
+
+# register blueprints
+app.register_blueprint(users)
+app.register_blueprint(posts)
+app.register_blueprint(main)
