@@ -1,9 +1,9 @@
 import os
 import secrets
 from PIL import Image
-from flask import url_for
+from flask import url_for, current_app
 from flask_mail import Message
-from flaskblog import app, mail
+from flaskblog import mail
 
 # Desc: utility functions for users blueprint
 
@@ -17,7 +17,7 @@ def save_picture(form_picture):
     picture_fn = random_hex + f_ext
     # create path to save file to
     picture_path = os.path.join(
-        app.root_path, 'static/profile_pics', picture_fn)
+        current_app.root_path, 'static/profile_pics', picture_fn)
     # resize image before saving
     output_size = (125, 125)
     i = Image.open(form_picture)
